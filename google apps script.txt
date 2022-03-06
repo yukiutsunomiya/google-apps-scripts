@@ -1,0 +1,155 @@
+main.gs
+var spreadSheet = SpreadsheetApp.getActiveSpreadsheet();
+var activeSheet = spreadSheet.getActiveSheet();
+const OUTPUT_CONDITION_SHEET = spreadSheet.getSheetByName('出力条件シート');
+const LOGIC_SHEET = spreadSheet.getSheetByName('ロジックシート'); 
+const ENCLOSING_CHARACTER_SHEET = spreadSheet.getSheetByName('囲み文字シート');
+
+function main() {
+  getSheetNames().forEach(function(sheetName){
+   if(isMasterSheet(sheetName))return;
+   changeFontColorsForProsessSheet(spreadSheet.getSheetByName(sheetName));
+   //createLinks(spreadSheet.getSheetByName(sheetName));
+  });
+}
+
+function trigger() {
+  if(isMasterSheet(activeSheet.getName()))return;
+  const TEMPLATE_COLUMN = 4;
+  const OUTPUT_CONDITION_COLUMN = 5;
+  const CONVERSION_LOGIC_COLUMN = 6;
+  var activeCell = activeSheet.getActiveCell();
+  var activeValue = activeCell.getValue();
+  console.log(activeValue);
+  if(!activeValue) return;
+  if(activeCell.getColumn() === TEMPLATE_COLUMN){ 
+    changeFontColorOfTemplateCell(activeCell,activeValue,getColorCodeList());
+  }else if(activeCell.getColumn() === OUTPUT_CONDITION_COLUMN){
+    outputConditionCreateLink(activeCell,activeValue);
+  }else if(activeCell.getColumn() === CONVERSION_LOGIC_COLUMN){
+    conversionLogicCreateLink(activeCell,activeValue);
+  }else{ 
+    return;
+  }
+}
+ 
+function getSheetNames(){
+  var sheetsName = [];
+  spreadSheet.getSheets().forEach(function(sheet){
+  sheetsName.push(sheet.getSheetName());
+  });
+  return sheetsName;
+}
+
+function isMasterSheet(sheetName){
+  var masterSheets = ['出力条件シート','ロジックシート','囲み文字シート','→工程','→マスタ系'];
+  return masterSheets.includes(sheetName);
+}
+
+color.gs
+function changeFontColorsForProsessSheet(prosessSheet){
+  const CREATE_SHEET_ITEM_START_ROW = 2;
+  var colorCodeList = getColorCodeList();
+  for(let prosessSheetRow = CREATE_SHEET_ITEM_START_ROW;prosessSheetRow <= prosessSheet.getLastRow(); prosessSheetRow++){
+    changeColorsOfEnclosingCharacterInTemplate(prosessSheetRow,prosessSheet,colorCodeList);
+  }
+}
+
+function changeColorsOfEnclosingCharacterInTemplate(prosessSheetRow,prosessSheet,colorCodeList){
+  const PROSESS_SHEET_TEMPLATE_COLUMN = 4;
+  var templateCell = prosessSheet.getRange(prosessSheetRow,PROSESS_SHEET_TEMPLATE_COLUMN);
+  var templateValue = templateCell.getValue();
+  if(!templateValue) return;
+  changeFontColorOfTemplateCell(templateCell,templateValue,colorCodeList);
+}
+
+function changeFontColorOfTemplateCell(cell,value,colorCodeList){
+  var richTextOfTemplete = cell.getRichTextValue();
+  for(var enclosingCharacter in colorCodeList){
+    var arrayEnclosingCharacterPositions = getPositionsOfEnclosingCharacterInTemplate(enclosingCharacter,value);
+    richTextOfTemplete = addRichTextStyleToRichTextOfTemplete(arrayEnclosingCharacterPositions,colorCodeList[enclosingCharacter],richTextOfTemplete);
+  }
+  cell.setRichTextValue(richTextOfTemplete);
+}
+
+function addRichTextStyleToRichTextOfTemplete(arrayEnclosingCharacterPositions,color,richTextOfTemplete){
+  var richTextOfTempleteBuilder = richTextOfTemplete.copy();
+  var color = SpreadsheetApp.newTextStyle().setForegroundColor(color).build();
+  arrayEnclosingCharacterPositions.forEach(function(enclosingCharacterRange){
+    richTextOfTempleteBuilder = richTextOfTempleteBuilder.setTextStyle(enclosingCharacterRange["ENCLOSING_CHARACTER_START_NUMBER"],enclosingCharacterRange["ENCLOSING_CHARACTER_END_NUMBER"],color);
+  });
+  return richTextOfTempleteBuilder.build();
+}
+
+function getPositionsOfEnclosingCharacterInTemplate(enclosingCharacter,templateValue){
+  var characterPosition= 0;
+  var temporaryRange =  { ENCLOSING_CHARACTER_START_NUMBER: "", ENCLOSING_CHARACTER_END_NUMBER: ""};
+  var returnArray = [];
+  console.log(enclosingCharacter);
+  while(templateValue.indexOf(enclosingCharacter,characterPosition) !== -1){
+    characterPosition = templateValue.indexOf(enclosingCharacter,characterPosition);
+    if(!temporaryRange["ENCLOSING_CHARACTER_START_NUMBER"]){
+      temporaryRange["ENCLOSING_CHARACTER_START_NUMBER"] = characterPosition++;
+      continue;
+    }else{
+      temporaryRange["ENCLOSING_CHARACTER_END_NUMBER"] = ++characterPosition;
+    }
+    returnArray.push(temporaryRange);
+    temporaryRange = {};
+  }
+  console.log(returnArray);
+  return returnArray;
+}
+
+function getColorCodeList(){
+  const ITEM_START_ROW = 2;
+  const ENCLOSING_CHARACTER_COLUMN = 2;
+  const COLOR_CODE_COLUMN = 5;
+  var returnColorCodeList = {};
+  for(let enclosingCharacterSheetRow = ITEM_START_ROW;enclosingCharacterSheetRow <= ENCLOSING_CHARACTER_SHEET.getLastRow();enclosingCharacterSheetRow++){
+    enclosingCharacter = ENCLOSING_CHARACTER_SHEET.getRange(enclosingCharacterSheetRow,ENCLOSING_CHARACTER_COLUMN).getValue();
+    if(!enclosingCharacter)return;
+    returnColorCodeList[enclosingCharacter] = ENCLOSING_CHARACTER_SHEET.getRange(enclosingCharacterSheetRow,COLOR_CODE_COLUMN).getValue();
+  }
+  return returnColorCodeList;
+}
+
+link.gs
+function createLinks(createLinkSheet) {
+  const CREATE_SHEET_ITEM_START_ROW = 2;
+  for(let createLinkSheetRow = CREATE_SHEET_ITEM_START_ROW; createLinkSheetRow <= createLinkSheet.getLastRow(); createLinkSheetRow++){
+    createOutputConditionSheetLink(createLinkSheetRow,createLinkSheet);
+    createLogicSheetLink(createLinkSheetRow,createLinkSheet);
+  }
+}
+
+function createOutputConditionSheetLink(createLinkSheetRow,createLinkSheet){
+  const CREATE_LINK_SHEET_OUTPUT_CONDTION_COLUMN = 5;
+  var targetValue = createLinkSheet.getRange(createLinkSheetRow,CREATE_LINK_SHEET_OUTPUT_CONDTION_COLUMN).getValue();
+  if(!targetValue) return;
+  var targetCell = createLinkSheet.getRange(createLinkSheetRow,CREATE_LINK_SHEET_OUTPUT_CONDTION_COLUMN);
+  outputConditionCreateLink(targetCell,targetValue);
+}
+
+function createLogicSheetLink(createLinkSheetRow,createLinkSheet){
+  const CREATE_LINK_SHEET_CONVERSION_LOGIC_COLUMN = 6;
+  var targetValue = createLinkSheet.getRange(createLinkSheetRow,CREATE_LINK_SHEET_CONVERSION_LOGIC_COLUMN).getValue();
+  if(!targetValue) return;
+  var targetCell = createLinkSheet.getRange(createLinkSheetRow,CREATE_LINK_SHEET_CONVERSION_LOGIC_COLUMN);
+  conversionLogicCreateLink(targetCell,targetValue);
+}
+
+function findSameValueRow(value,findSheet,findSheetStartRow,findSheetColumn){
+  for(let findRow = findSheetStartRow; findRow <= findSheet.getLastRow();findRow++){
+    console.log(findSheet.getRange(findRow,findSheetColumn).getValue());
+    if(value === findSheet.getRange(findRow,findSheetColumn).getValue()){
+      return findRow;
+    }
+  }
+  console.log("存在しない名称");
+  return false;
+}
+
+function setValueLinkSheet(sheet,row,column,hyperlink){
+  sheet.getRange(row,column).setValue(hyperlink);
+}
